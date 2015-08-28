@@ -39,6 +39,8 @@ import datetime
 import errno
 import ast
 import operator
+import platform
+import sys
 from contextlib import closing
 
 import sickbeard
@@ -143,9 +145,12 @@ def remove_non_release_groups(name):
                        '\[silv4\]$':       'searchre',
                        '\[Seedbox\]$':     'searchre',
                        '\[AndroidTwoU\]$': 'searchre',
+                       ' \[1044\]$':       'searchre',
                        '\.RiPSaLoT$':      'searchre',
-                       '\.GiuseppeTnT$':      'searchre',
+                       '\.GiuseppeTnT$':   'searchre',
+                       '\.Renc$':   'searchre',
                        '-NZBGEEK$':        'searchre',
+                       '-Siklopentan$':        'searchre',
                        '-RP$':             'searchre',
                        '-20-40$':          'searchre',
                        '\.\[www\.usabit\.com\]$': 'searchre',
@@ -1153,7 +1158,7 @@ def extractZip(archive, targetDir):
         if not os.path.exists(targetDir):
             os.mkdir(targetDir)
 
-        zip_file = zipfile.ZipFile(archive, 'r')
+        zip_file = zipfile.ZipFile(archive, 'r', allowZip64=True)
         for member in zip_file.namelist():
             filename = os.path.basename(member)
             # skip directories
@@ -1175,7 +1180,7 @@ def extractZip(archive, targetDir):
 
 def backupConfigZip(fileList, archive, arcname = None):
     try:
-        a = zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED)
+        a = zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, allowZip64=True)
         for f in fileList:
             a.write(f, os.path.relpath(f, arcname))
         a.close()
@@ -1197,7 +1202,7 @@ def restoreConfigZip(archive, targetDir):
             bakFilename = '{0}-{1}'.format(path_leaf(targetDir), datetime.datetime.strftime(datetime.datetime.now(), '%Y%m%d_%H%M%S'))
             shutil.move(targetDir, os.path.join(ntpath.dirname(targetDir), bakFilename))
 
-        zip_file = zipfile.ZipFile(archive, 'r')
+        zip_file = zipfile.ZipFile(archive, 'r', allowZip64=True)
         for member in zip_file.namelist():
             zip_file.extract(member, targetDir)
         zip_file.close()
@@ -1626,3 +1631,20 @@ def isFileLocked(file, writeLockCheck=False):
             return True
            
     return False
+
+def getDiskSpaceUsage(diskPath=None):
+    '''
+    returns the free space in MB for a given path or False if no path given
+    @param diskPath: the filesystem path being checked
+    '''
+
+    if diskPath:
+        if platform.system() == 'Windows':
+            free_bytes = ctypes.c_ulonglong(0)
+            ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(diskPath), None, None, ctypes.pointer(free_bytes))
+            return free_bytes.value / 1024 / 1024
+        else:
+            st = os.statvfs(diskPath)
+            return st.f_bavail * st.f_frsize / 1024 / 1024
+    else:
+        return False

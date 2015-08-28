@@ -80,8 +80,8 @@ class ApiHandler(RequestHandler):
     def __init__(self, *args, **kwargs):
         super(ApiHandler, self).__init__(*args, **kwargs)
 
-    def set_default_headers(self):
-        self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    #def set_default_headers(self):
+        #self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
 
     def get(self, *args, **kwargs):
         kwargs = self.request.arguments
@@ -1100,7 +1100,7 @@ class CMD_SubtitleSearch(ApiCall):
             return _responds(RESULT_FAILURE, msg='Unable to find subtitles')
 
         # return the correct json value
-        newSubtitles = frozenset(ep_obj.subtitles).difference(previous_subtitles)
+        newSubtitles = frozenset(epObj.subtitles).difference(previous_subtitles)
         if newSubtitles:
             newLangs = [subtitles.fromietf(newSub) for newSub in newSubtitles]
             status = 'New subtitles downloaded: %s' % ', '.join([newLang.name for newLang in newLangs])
@@ -1302,7 +1302,7 @@ class CMD_Backlog(ApiCall):
             showEps = []
 
             sqlResults = myDB.select(
-                "SELECT * FROM tv_episodes WHERE showid = ? ORDER BY season DESC, episode DESC",
+                "SELECT tv_episodes.*, tv_shows.paused FROM tv_episodes INNER JOIN tv_shows ON tv_episodes.showid = tv_shows.indexer_id WHERE showid = ? and paused = 0 ORDER BY season DESC, episode DESC",
                 [curShow.indexerid])
 
             for curResult in sqlResults:
@@ -1387,7 +1387,8 @@ class CMD_PostProcess(ApiCall):
                                     "force_replace": {"desc": "Force already Post Processed Dir/Files"},
                                     "return_data": {"desc": "Returns result for the process"},
                                     "process_method": {"desc": "Symlink, hardlink, move or copy the file"},
-                                    "is_priority": {"desc": "Replace the file even if it exists in a higher quality)"},
+                                    "is_priority": {"desc": "Replace the file even if it exists in a higher quality"},
+                                    "failed": {"desc": "Mark download as failed"},
                                     "type": {"desc": "What type of postprocess request is this, auto of manual"}
              }
     }

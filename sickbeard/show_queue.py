@@ -215,9 +215,6 @@ class QueueItemAdd(ShowQueueItem):
         self.whitelist = whitelist
         self.default_status_after = default_status_after
 
-        if sickbeard.TRAKT_USE_ROLLING_DOWNLOAD and sickbeard.USE_TRAKT:
-            self.paused = sickbeard.TRAKT_ROLLING_ADD_PAUSED
-
         self.show = None
 
         # this will initialize self.show to None
@@ -319,7 +316,7 @@ class QueueItemAdd(ShowQueueItem):
                     self.show.release_groups.set_black_keywords(self.blacklist)
                 if self.whitelist:
                     self.show.release_groups.set_white_keywords(self.whitelist)
-                    
+
             # be smartish about this
             #if self.show.genre and "talk show" in self.show.genre.lower():
             #    self.show.air_by_date = 1
@@ -390,9 +387,8 @@ class QueueItemAdd(ShowQueueItem):
             logger.log(u"Error searching dir for episodes: " + ex(e), logger.ERROR)
             logger.log(traceback.format_exc(), logger.DEBUG)
 
-        sickbeard.traktRollingScheduler.action.updateWantedList(self.show.indexerid)
-
         # if they set default ep status to WANTED then run the backlog to search for episodes
+        # FIXME: This needs to be a backlog queue item!!!
         if self.show.default_ep_status == WANTED:
             logger.log(u"Launching backlog for this show since its episodes are WANTED")
             sickbeard.backlogSearchScheduler.action.searchBacklog([self.show])
@@ -548,6 +544,7 @@ class QueueItemUpdate(ShowQueueItem):
             logger.log(u"Error loading IMDb info: " + ex(e), logger.ERROR)
             logger.log(traceback.format_exc(), logger.DEBUG)
 
+        # have to save show before reading episodes from db
         try:
             self.show.saveToDB()
         except Exception, e:
@@ -567,7 +564,6 @@ class QueueItemUpdate(ShowQueueItem):
                 self.show.indexer).name + ", the show info will not be refreshed: " + ex(e), logger.ERROR)
             IndexerEpList = None
 
-        foundMissingEps = False
         if IndexerEpList is None:
             logger.log(u"No data returned from " + sickbeard.indexerApi(
                 self.show.indexer).name + ", unable to update this show", logger.ERROR)
@@ -575,15 +571,13 @@ class QueueItemUpdate(ShowQueueItem):
             # for each ep we found on the Indexer delete it from the DB list
             for curSeason in IndexerEpList:
                 for curEpisode in IndexerEpList[curSeason]:
-                    logger.log(u"Removing " + str(curSeason) + "x" + str(curEpisode) + " from the DB list",
-                               logger.DEBUG)
+                    curEp = self.show.getEpisode(curSeason, curEpisode)
+                    curEp.saveToDB()
+
                     if curSeason in DBEpList and curEpisode in DBEpList[curSeason]:
                         del DBEpList[curSeason][curEpisode]
-                    else:
-                        # found missing episodes
-                        foundMissingEps = True
 
-            # for the remaining episodes in the DB list just delete them from the DB
+            # remaining episodes in the DB list are not on the indexer, just delete them from the DB
             for curSeason in DBEpList:
                 for curEpisode in DBEpList[curSeason]:
                     logger.log(u"Permanently deleting episode " + str(curSeason) + "x" + str(
@@ -594,10 +588,12 @@ class QueueItemUpdate(ShowQueueItem):
                     except exceptions.EpisodeDeletedException:
                         pass
 
-        # if they set default ep status to WANTED then run the backlog
-        if foundMissingEps and self.show.default_ep_status == WANTED:
-            logger.log(u"Launching backlog for this show since we found missing episodes")
-            sickbeard.backlogSearchScheduler.action.searchBacklog([self.show])
+        # save show again, in case episodes have changed
+        try:
+            self.show.saveToDB()
+        except Exception, e:
+            logger.log(u"Error saving show info to the database: " + ex(e), logger.ERROR)
+            logger.log(traceback.format_exc(), logger.DEBUG)
 
         logger.log(u"Finished update of " + self.show.name, logger.DEBUG)
 
